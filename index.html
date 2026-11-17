@@ -54,15 +54,21 @@
 
         <!-- Träffkarta -->
         <div id="tab-map" class="space-y-6 hidden">
-            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-sm">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-sm font-bold text-slate-200">Träffbild (X / Y)</h2>
+            <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-sm space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-sm font-bold text-slate-200">Träffbild (Välj pass)</h2>
                     <span id="shot-count-badge" class="text-xs bg-blue-900 text-blue-300 px-2.5 py-1 rounded-full font-medium">0 skott</span>
                 </div>
+
+                <!-- Pass-väljare (Container för checkboxar) -->
+                <div class="bg-slate-900 p-3 rounded-xl border border-slate-700 max-h-40 overflow-y-auto space-y-2" id="pass-checkboxes">
+                    <p class="text-xs text-slate-400">Laddar pass...</p>
+                </div>
+
                 <div class="relative w-full aspect-square bg-slate-900 rounded-xl border border-slate-700 flex justify-center items-center overflow-hidden p-2">
                     <canvas id="hitMapChart"></canvas>
                 </div>
-                <p class="text-xs text-slate-400 text-center mt-3">Visar samtliga inlästa skott i milimeterkoordinater.</p>
+                <p class="text-xs text-slate-400 text-center">Bocka i ett eller flera pass ovan för att jämföra träffbilder.</p>
             </div>
         </div>
 
@@ -74,6 +80,16 @@
         let shootingData = [];
         let scoreChart = null;
         let hitMapChart = null;
+
+        // Färgpalett för olika pass i träffkartan
+        const palette = [
+            'rgba(239, 68, 68, 0.85)',   // Röd
+            'rgba(59, 130, 246, 0.85)',  // Blå
+            'rgba(16, 185, 129, 0.85)',  // Grön
+            'rgba(245, 158, 11, 0.85)',  // Gul/Orange
+            'rgba(168, 85, 247, 0.85)',  // Lila
+            'rgba(236, 72, 153, 0.85)'   // Rosa
+        ];
 
         function showTab(tab) {
             document.getElementById('tab-dashboard').classList.add('hidden');
@@ -100,6 +116,7 @@
                 
                 updateKPIs();
                 renderScoreChart();
+                initPassCheckboxes();
                 renderHitMap();
             } catch (err) {
                 document.getElementById('loading').innerText = 'Kunde inte ladda data. Kontrollera nätverket.';
@@ -107,7 +124,6 @@
         }
 
         function updateKPIs() {
-            // Unika pass baserat på filnamn eller datum
             const uniquePasses = [...new Set(shootingData.map(d => d.Filnamn))].filter(Boolean);
             document.getElementById('kpi-total-pass').innerText = uniquePasses.length || shootingData.length;
             
@@ -119,7 +135,6 @@
         function renderScoreChart() {
             const ctx = document.getElementById('scoreChart').getContext('2d');
             
-            // Gruppera eller plocka unika pass med totalpoäng
             const passMap = {};
             shootingData.forEach(d => {
                 if(d.Filnamn && d.Total) {
@@ -159,31 +174,79 @@
             });
         }
 
+        function initPassCheckboxes() {
+            const container = document.getElementById('pass-checkboxes');
+            container.innerHTML = '';
+
+            // Skapa checkboxar för varje pass (sorterat nyast först)
+            shootingData.forEach((pass, index) => {
+                if (!pass.Filnamn) return;
+
+                const label = document.createElement('label');
+                label.className = "flex items-center space-x-2 text-xs text-slate-300 cursor-pointer hover:text-white";
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = index;
+                // Förvälj det nyaste passet automatiskt
+                if (index === 0) checkbox.checked = true;
+                checkbox.className = "rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500";
+                checkbox.addEventListener('change', renderHitMap);
+
+                const colorIndicator = document.createElement('span');
+                colorIndicator.className = "w-2.5 h-2.5 rounded-full inline-block";
+                colorIndicator.style.backgroundColor = palette[index % palette.length];
+
+                const textSpan = document.createElement('span');
+                textSpan.innerText = `${pass.Datum || 'Datum saknas'} (${pass.Total || '0'}p)`;
+
+                label.appendChild(checkbox);
+                label.appendChild(colorIndicator);
+                label.appendChild(textSpan);
+                container.appendChild(label);
+            });
+        }
+
         function renderHitMap() {
             const ctx = document.getElementById('hitMapChart').getContext('2d');
+            const checkboxes = document.querySelectorAll('#pass-checkboxes input[type="checkbox"]');
             
-            // Plocka X och Y koordinater
-            const scatterData = shootingData
-                .filter(d => d.X !== "" && d.Y !== "" && !isNaN(d.X) && !isNaN(d.Y))
-                .map(d => ({ x: parseFloat(d.X), y: parseFloat(d.Y) }));
+            let datasets = [];
+            let totalShotsCount = 0;
 
-            document.getElementById('shot-count-badge').innerText = `${scatterData.length} skott`;
+            checkboxes.forEach((cb, colorIdx) => {
+                if (cb.checked) {
+                    const passIndex = parseInt(cb.value);
+                    const pass = shootingData[passIndex];
+                    
+                    if (pass && pass.shots && pass.shots.length > 0) {
+                        totalShotsCount += pass.shots.length;
+                        datasets.push({
+                            label: pass.Filnamn,
+                            data: pass.shots.map(s => ({ x: s.x, y: s.y })),
+                            backgroundColor: palette[colorIdx % palette.length],
+                            pointRadius: 5,
+                            pointHoverRadius: 7
+                        });
+                    }
+                }
+            });
+
+            document.getElementById('shot-count-badge').innerText = `${totalShotsCount} skott`;
+
+            if (hitMapChart) {
+                hitMapChart.destroy();
+            }
 
             hitMapChart = new Chart(ctx, {
                 type: 'scatter',
-                data: {
-                    datasets: [{
-                        label: 'Träffar',
-                        data: scatterData,
-                        backgroundColor: 'rgba(239, 68, 68, 0.75)',
-                        pointRadius: 5,
-                        pointHoverRadius: 7
-                    }]
-                },
+                data: { datasets: datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
-                    plugins: { legend: { display: false } },
+                    plugins: { 
+                        legend: { display: false } 
+                    },
                     scales: {
                         x: { 
                             min: -40, max: 40, 
