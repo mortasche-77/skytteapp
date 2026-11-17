@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyttedagbok</title>
+    <!-- Tailwind CSS för modern och snygg mobilanpassad design -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js för grafer och träffkarta -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen">
+    
+    <!-- Navigationsbar -->
+    <nav class="bg-slate-800 border-b border-slate-700 shadow-md">
+        <div class="max-w-4xl mx-auto px-4 flex justify-between items-center h-16">
+            <span class="font-bold text-lg text-blue-400">🎯 Skyttedagbok</span>
+            <div class="space-x-4">
+                <button onclick="showTab('dashboard')" id="btn-dashboard" class="text-sm font-medium text-blue-400 border-b-2 border-blue-400 pb-1">Översikt</button>
+                <button onclick="showTab('map')" id="btn-map" class="text-sm font-medium text-slate-400 hover:text-slate-200 pb-1">Träffkarta</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Huvudinnehåll -->
+    <main class="max-w-4xl mx-auto p-4 space-y-6">
+        
+        <!-- Laddningsindikator -->
+        <div id="loading" class="text-center py-12 text-slate-400">
+            Hämtar skjutdata från molnet...
+        </div>
+
+        <!-- Dashboard / Översikt -->
+        <div id="tab-dashboard" class="space-y-6 hidden">
+            <!-- KPI-kort -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                    <p class="text-xs text-slate-400">Totalt antal pass</p>
+                    <p id="kpi-total-pass" class="text-2xl font-bold text-blue-400">-</p>
+                </div>
+                <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                    <p class="text-xs text-slate-400">Högsta resultat</p>
+                    <p id="kpi-max-score" class="text-2xl font-bold text-emerald-400">-</p>
+                </div>
+            </div>
+
+            <!-- Utvecklingsgraf -->
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3">Poängutveckling över tid</h2>
+                <div class="relative h-64">
+                    <canvas id="scoreChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Träffkarta -->
+        <div id="tab-map" class="space-y-6 hidden">
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3">Träffbild & Spridning</h2>
+                <div class="relative h-80 flex justify-center items-center">
+                    <canvas id="hitMapChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Byt ut mot din Webblänk från Google Apps Script
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwAHEQNCUw92foijbE2myoNnsxc597uj5y23U7FNGmnm581u_ktNV8q2_VjLMK7pE8_/exec';
+
+        let shootingData = [];
+        let scoreChart = null;
+        let hitMapChart = null;
+
+        // Växla mellan flikar
+        function showTab(tab) {
+            document.getElementById('tab-dashboard').classList.add('hidden');
+            document.getElementById('tab-map').classList.add('hidden');
+            document.getElementById('btn-dashboard').className = "text-sm font-medium text-slate-400 pb-1";
+            document.getElementById('btn-map').className = "text-sm font-medium text-slate-400 pb-1";
+
+            if (tab === 'dashboard') {
+                document.getElementById('tab-dashboard').classList.remove('hidden');
+                document.getElementById('btn-dashboard').className = "text-sm font-medium text-blue-400 border-b-2 border-blue-400 pb-1";
+            } else {
+                document.getElementById('tab-map').classList.remove('hidden');
+                document.getElementById('btn-map').className = "text-sm font-medium text-blue-400 border-b-2 border-blue-400 pb-1";
+            }
+        }
+
+        // Hämta data från Google Sheet via Apps Script API
+        async function loadData() {
+            try {
+                const response = await fetch(API_URL);
+                shootingData = await response.json();
+                
+                document.getElementById('loading').classList.add('hidden');
+                showTab('dashboard');
+                
+                updateKPIs();
+                renderScoreChart();
+            } catch (err) {
+                document.getElementById('loading').innerText = 'Kunde inte ladda data. Kontrollera API-länken.';
+            }
+        }
+
+        // Uppdatera nyckeltal (KPI)
+        function updateKPIs() {
+            document.getElementById('kpi-total-pass').innerText = shootingData.length;
+            const maxScore = Math.max(...shootingData.map(d => parseFloat(d.Total) || 0));
+            document.getElementById('kpi-max-score').innerText = maxScore > 0 ? maxScore : '-';
+        }
+
+        // Rita linjegraf för poängutveckling
+        function renderScoreChart() {
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            const labels = shootingData.map(d => d.Datum);
+            const scores = shootingData.map(d => parseFloat(d.Total) || 0);
+
+            scoreChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Totalpoäng',
+                        data: scores,
+                        borderColor: '#60a5fa',
+                        backgroundColor: 'rgba(96, 165, 250, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                        y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
