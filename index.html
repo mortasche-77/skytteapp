@@ -31,7 +31,6 @@
 
         <!-- Dashboard / Översikt -->
         <div id="tab-dashboard" class="space-y-6 hidden">
-            <!-- KPI-kort -->
             <div class="grid grid-cols-2 gap-3">
                 <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-sm">
                     <p class="text-xs text-slate-400 font-medium">Antal pass</p>
@@ -43,7 +42,6 @@
                 </div>
             </div>
 
-            <!-- Utvecklingsgraf -->
             <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-sm">
                 <h2 class="text-sm font-bold text-slate-200 mb-3">Poängutveckling</h2>
                 <div class="relative h-60">
@@ -60,7 +58,7 @@
                     <span id="shot-count-badge" class="text-xs bg-blue-900 text-blue-300 px-2.5 py-1 rounded-full font-medium">0 skott</span>
                 </div>
 
-                <!-- Pass-väljare (Container för checkboxar) -->
+                <!-- Pass-väljare -->
                 <div class="bg-slate-900 p-3 rounded-xl border border-slate-700 max-h-40 overflow-y-auto space-y-2" id="pass-checkboxes">
                     <p class="text-xs text-slate-400">Laddar pass...</p>
                 </div>
@@ -75,18 +73,18 @@
     </main>
 
     <script>
+        // Klistra in din aktuella Apps Script URL här nedanför
         const API_URL = 'https://script.google.com/macros/s/AKfycbyXHpsd0Gpz8hyi17k8kgjV_y0H_ntXkidL5IBtCIt3LOZtFnxobLmKDJMLSXU8Ol7m/exec';
 
         let shootingData = [];
         let scoreChart = null;
         let hitMapChart = null;
 
-        // Färgpalett för olika pass i träffkartan
         const palette = [
             'rgba(239, 68, 68, 0.85)',   // Röd
             'rgba(59, 130, 246, 0.85)',  // Blå
             'rgba(16, 185, 129, 0.85)',  // Grön
-            'rgba(245, 158, 11, 0.85)',  // Gul/Orange
+            'rgba(245, 158, 11, 0.85)',  // Orange
             'rgba(168, 85, 247, 0.85)',  // Lila
             'rgba(236, 72, 153, 0.85)'   // Rosa
         ];
@@ -178,7 +176,6 @@
             const container = document.getElementById('pass-checkboxes');
             container.innerHTML = '';
 
-            // Skapa checkboxar för varje pass (sorterat nyast först)
             shootingData.forEach((pass, index) => {
                 if (!pass.Filnamn) return;
 
@@ -188,8 +185,7 @@
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.value = index;
-                // Förvälj det nyaste passet automatiskt
-                if (index === 0) checkbox.checked = true;
+                if (index === 0) checkbox.checked = true; // Förvälj nyaste passet
                 checkbox.className = "rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500";
                 checkbox.addEventListener('change', renderHitMap);
 
@@ -223,7 +219,7 @@
                         totalShotsCount += pass.shots.length;
                         datasets.push({
                             label: pass.Filnamn,
-                            data: pass.shots.map(s => ({ x: s.x, y: s.y })),
+                            data: pass.shots.path ? pass.shots : pass.shots.map(s => ({ x: s.x, y: s.y })),
                             backgroundColor: palette[colorIdx % palette.length],
                             pointRadius: 5,
                             pointHoverRadius: 7
@@ -244,20 +240,10 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
-                    plugins: { 
-                        legend: { display: false } 
-                    },
+                    plugins: { legend: { display: false } },
                     scales: {
-                        x: { 
-                            min: -40, max: 40, 
-                            grid: { color: '#334155' }, 
-                            ticks: { color: '#94a3b8', font: { size: 10 } } 
-                        },
-                        y: { 
-                            min: -40, max: 40, 
-                            grid: { color: '#334155' }, 
-                            ticks: { color: '#94a3b8', font: { size: 10 } } 
-                        }
+                        x: { min: -40, max: 40, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                        y: { min: -40, max: 40, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
                     }
                 }
             });
