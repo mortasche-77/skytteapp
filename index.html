@@ -54,7 +54,7 @@
         <div id="tab-map" class="space-y-6 hidden">
             <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 shadow-sm space-y-4">
                 <div class="flex justify-between items-center">
-                    <h2 class="text-sm font-bold text-slate-200">Träffbild (Välj pass)</h2>
+                    <h2 class="text-sm font-bold text-slate-200">Träffbild & Tavla</h2>
                     <span id="shot-count-badge" class="text-xs bg-blue-900 text-blue-300 px-2.5 py-1 rounded-full font-medium">0 skott</span>
                 </div>
 
@@ -63,31 +63,75 @@
                     <p class="text-xs text-slate-400">Laddar pass...</p>
                 </div>
 
-                <div class="relative w-full aspect-square bg-slate-900 rounded-xl border border-slate-700 flex justify-center items-center overflow-hidden p-2">
+                <!-- Kvadratisk behållare för tavlan -->
+                <div class="relative w-full aspect-square bg-slate-950 rounded-xl border border-slate-700 flex justify-center items-center overflow-hidden p-2">
                     <canvas id="hitMapChart"></canvas>
                 </div>
-                <p class="text-xs text-slate-400 text-center">Bocka i ett eller flera pass ovan för att jämföra träffbilder.</p>
+                <p class="text-xs text-slate-400 text-center">Ciklarna motsvarar tavelringar (10, 9, 8, 7 i mm).</p>
             </div>
         </div>
 
     </main>
 
     <script>
-        // Klistra in din aktuella Apps Script URL här nedanför
-        const API_URL = 'https://script.google.com/macros/s/AKfycbwY7EO9MDnzvTwoGZ_2G0jZior9m1MeS_CcfAPQUBLVL3-5Cfl8h0ZGMxmsw3c-BEfQkw/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbyXHpsd0Gpz8hyi17k8kgjV_y0H_ntXkidL5IBtCIt3LOZtFnxobLmKDJMLSXU8Ol7m/exec';
 
         let shootingData = [];
         let scoreChart = null;
         let hitMapChart = null;
 
         const palette = [
-            'rgba(239, 68, 68, 0.85)',   // Röd
-            'rgba(59, 130, 246, 0.85)',  // Blå
-            'rgba(16, 185, 129, 0.85)',  // Grön
-            'rgba(245, 158, 11, 0.85)',  // Orange
-            'rgba(168, 85, 247, 0.85)',  // Lila
-            'rgba(236, 72, 153, 0.85)'   // Rosa
+            'rgba(239, 68, 68, 0.9)',   // Röd
+            'rgba(59, 130, 246, 0.9)',  // Blå
+            'rgba(16, 185, 129, 0.9)',  // Grön
+            'rgba(245, 158, 11, 0.9)',  // Orange
+            'rgba(168, 85, 247, 0.9)',  // Lila
+            'rgba(236, 72, 153, 0.9)'   // Rosa
         ];
+
+        // Chart.js Plugin för att rita ut tavelringar som bakgrund
+        const targetBackgroundPlugin = {
+            id: 'targetBackground',
+            beforeDraw(chart) {
+                const { ctx, chartArea: { left, right, top, bottom, width, height }, scales: { x, y } } = chart;
+                ctx.save();
+                
+                // Exempel för 10m luftpistol (ungefärliga tavelringar i mm: 10-ring = 11.5mm, 9-ring = 27.5mm, osv, anpassat till skalan -30 till 30)
+                // Vi ritar cirklar baserat på millimeterradier
+                const rings = [
+                    { radiusMm: 5.0, color: 'rgba(255, 255, 255, 0.15)', label: '10' },
+                    { radiusMm: 12.5, color: 'rgba(255, 255, 255, 0.1)', label: '9' },
+                    { radiusMm: 20.0, color: 'rgba(255, 255, 255, 0.07)', label: '8' },
+                    { radiusMm: 27.5, color: 'rgba(255, 255, 255, 0.05)', label: '7' }
+                ];
+
+                rings.forEach(ring => {
+                    const centerX = x.getPixelForValue(0);
+                    const centerY = y.getPixelForValue(0);
+                    const radiusX = (x.getPixelForValue(ring.radiusMm) - centerX);
+
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, Math.abs(radiusX), 0, 2 * Math.PI);
+                    ctx.fillStyle = ring.color;
+                    ctx.fill();
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                    ctx.stroke();
+                });
+
+                // Rita hårkors i mitten
+                const cx = x.getPixelForValue(0);
+                const cy = y.getPixelForValue(0);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx, top); ctx.lineTo(cx, bottom);
+                ctx.moveTo(left, cy); ctx.lineTo(right, cy);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        };
 
         function showTab(tab) {
             document.getElementById('tab-dashboard').classList.add('hidden');
@@ -132,7 +176,6 @@
 
         function renderScoreChart() {
             const ctx = document.getElementById('scoreChart').getContext('2d');
-            
             const passMap = {};
             shootingData.forEach(d => {
                 if(d.Filnamn && d.Total) {
@@ -141,16 +184,13 @@
             });
             const passes = Object.values(passMap);
 
-            const labels = passes.map(p => p.datum);
-            const scores = passes.map(p => p.total);
-
             scoreChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
+                    labels: passes.map(p => p.datum),
                     datasets: [{
                         label: 'Totalpoäng',
-                        data: scores,
+                        data: passes.map(p => p.total),
                         borderColor: '#60a5fa',
                         backgroundColor: 'rgba(96, 165, 250, 0.1)',
                         borderWidth: 2,
@@ -185,7 +225,7 @@
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.value = index;
-                if (index === 0) checkbox.checked = true; // Förvälj nyaste passet
+                if (index === 0) checkbox.checked = true;
                 checkbox.className = "rounded bg-slate-800 border-slate-600 text-blue-500 focus:ring-blue-500";
                 checkbox.addEventListener('change', renderHitMap);
 
@@ -219,10 +259,10 @@
                         totalShotsCount += pass.shots.length;
                         datasets.push({
                             label: pass.Filnamn,
-                            data: pass.shots.path ? pass.shots : pass.shots.map(s => ({ x: s.x, y: s.y })),
+                            data: pass.shots.map(s => ({ x: s.x, y: s.y })),
                             backgroundColor: palette[colorIdx % palette.length],
-                            pointRadius: 5,
-                            pointHoverRadius: 7
+                            pointRadius: 6,
+                            pointHoverRadius: 8
                         });
                     }
                 }
@@ -239,13 +279,23 @@
                 data: { datasets: datasets },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: true, // Tvingar perfekt kvadratisk proportion
+                    aspectRatio: 1,            // 1:1 proportion
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { min: -40, max: 40, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
-                        y: { min: -40, max: 40, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+                        x: { 
+                            min: -32, max: 32, 
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+                            ticks: { color: '#94a3b8', font: { size: 9 } } 
+                        },
+                        y: { 
+                            min: -32, max: 32, 
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }, 
+                            ticks: { color: '#94a3b8', font: { size: 9 } } 
+                        }
                     }
-                }
+                },
+                plugins: [targetBackgroundPlugin]
             });
         }
 
